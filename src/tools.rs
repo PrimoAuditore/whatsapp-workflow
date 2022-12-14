@@ -4,20 +4,10 @@ extern crate redis;
 use redis::{Commands, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::error::Error;
+use actix_web::cookie::time;
+use actix_web::cookie::time::{OffsetDateTime, UtcOffset};
+use actix_web::cookie::time::macros::offset;
 use crate::structs::ListChoice;
-
-
-// pub enum FlowStatus {
-//     FlowStarted = 1,
-//     WaitingForResponse = 2,
-//     ServiceSelected = 3,
-//     BrandSelected = 4,
-//     ModelSelected = 5,
-//     VinProvided = 6,
-//     DescriptionProvided = 7,
-//     SuccessfulRequest = 8,
-//     ProductFound = 9,
-// }
 
 pub enum FlowStatus {
     FlowStarted = 1,
@@ -55,6 +45,7 @@ impl FlowStatus{
             11 => FlowStatus::PartDescriptionProvided,
             12 => FlowStatus::RequestAccepted,
             13 => FlowStatus::PartFound,
+            14 => FlowStatus::RequestCanceled,
             _ => panic!("Value not found")
         }
     }
@@ -68,7 +59,7 @@ fn create_client() -> Result<redis::Connection, Box<dyn Error>> {
 }
 
 pub fn create_request_tracker(stream_name: &str, track_id: &str) -> Result<String, Box<dyn Error>> {
-    let client = redis::Client::open("redis://127.0.0.1/")?;
+    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
     let mut con = client.get_connection()?;
 
     let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -93,8 +84,33 @@ pub fn create_request_tracker(stream_name: &str, track_id: &str) -> Result<Strin
     Ok("ok".to_string())
 }
 
+
+pub fn check_registry_expiry(current_status: &FlowStatus, client_last_event: &Result<FlowRegister, Box<dyn Error>>) -> Result<bool, Box<dyn Error>>{
+
+    let time_as_integer = &client_last_event.as_ref().unwrap().timestamp.as_ref().unwrap().parse::<i64>().unwrap();
+    let parsed_time = OffsetDateTime::from_unix_timestamp(*time_as_integer/1000)?.to_offset(offset!(-3));
+    let time_difference = SystemTime::now().duration_since(SystemTime::from(parsed_time));
+
+    println!("parsed time: {}", parsed_time.format(&time::format_description::well_known::Iso8601::DEFAULT).unwrap());
+    // If last register has more than 3 hours
+    if time_difference.unwrap().as_secs() >10800  {
+
+        match current_status {
+            FlowStatus::FlowStarted | FlowStatus::ServiceModalSent | FlowStatus::ServiceSelected | FlowStatus::BrandModalSent
+            | FlowStatus::BrandSelected | FlowStatus::ModelModalSent | FlowStatus::ModelSelected | FlowStatus::VinRequestSent
+            | FlowStatus::VinProvided | FlowStatus::PartDescriptionRequested | FlowStatus::PartDescriptionProvided => {
+                return  Ok(false);
+            }
+            _ => { return Ok(true)}
+        }
+
+    };
+
+    Ok(true)
+}
+
 pub fn update_flow_status(stream_name: &str, last_register: &str, updated_status: FlowStatus, value: Option<String>) -> Result<String, Box<dyn Error>> {
-    let client = redis::Client::open("redis://127.0.0.1/")?;
+    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
     let mut con = client.get_connection()?;
 
     let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -121,7 +137,7 @@ pub fn update_flow_status(stream_name: &str, last_register: &str, updated_status
 }
 
 pub fn get_last_event(stream_name: &str) -> Result<FlowRegister, Box<dyn Error>> {
-    let client = redis::Client::open("redis://127.0.0.1/")?;
+    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
 
     let mut con = client.get_connection().expect("conn");
 
@@ -301,7 +317,7 @@ pub(crate) fn validate_vin(vin:String) -> bool{
 }
 
 pub fn get_brand_models(brand:&str, page:i32, brand_selected: &str) -> Result<Vec<ListChoice>, Box<dyn Error>>{
-    let client = redis::Client::open("redis://127.0.0.1/")?;
+    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
 
     let mut con = client.get_connection().expect("conn");
 
@@ -342,7 +358,7 @@ pub fn get_brand_models(brand:&str, page:i32, brand_selected: &str) -> Result<Ve
 
 
 pub fn get_makes(page: i32) -> Result<Vec<ListChoice>, Box<dyn Error>>{
-    let client = redis::Client::open("redis://127.0.0.1/")?;
+    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
 
     let mut con = client.get_connection().expect("conn");
 
