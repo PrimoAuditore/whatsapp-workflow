@@ -1,4 +1,4 @@
-FROM rust
+FROM rust:slim as build
 
 ENV META_TOKEN=""
 ENV REDIS_URL=""
@@ -6,4 +6,8 @@ ENV REDIS_URL=""
 WORKDIR /app
 COPY . .
 RUN cargo build --release
-ENTRYPOINT ["./target/release/vin-webhook"]
+
+FROM debian:11-slim
+WORKDIR /app
+COPY --from=build /app/target/release/vin-webhook ./vin-webhook
+CMD ["./vin-webhook"]

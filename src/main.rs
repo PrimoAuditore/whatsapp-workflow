@@ -3,9 +3,6 @@ extern crate core;
 use actix_web::{get, post, App, HttpResponse, HttpServer, Responder, HttpRequest};
 use std::collections::HashMap;
 use std::env;
-use std::str::FromStr;
-use std::time::SystemTime;
-use actix_web::http::header::HttpDate;
 use uuid::Uuid;
 use crate::meta_requests::{help_request, send_error_message};
 use crate::tools::{create_request_tracker, FlowStatus, get_last_event, update_flow_status};
@@ -42,6 +39,8 @@ async fn test(req_body: String) -> impl Responder {
 #[post("/webhook")]
 async fn events(req_body: String) -> impl Responder {
 
+    println!("{}", req_body);
+
     // Check for required env variables
     if env::var("META_TOKEN").is_err() || env::var("REDIS_URL").is_err(){
         panic!("One or many env variables are not present");
@@ -75,20 +74,13 @@ async fn events(req_body: String) -> impl Responder {
     let tracker_id = &client_last_event.as_ref().unwrap().tracker_id.as_ref().expect("register with not tracker id");
     let phone_number = &message[0].from;
 
-    let parsed_time = HttpDate::from_str(&client_last_event.as_ref().unwrap().timestamp.as_ref().unwrap().as_str());
 
-    if parsed_time.is_err() {
-        panic!("Error parsing datetime");
-    }
+    tools::check_registry_expiry(&current_status, &client_last_event);
 
-    let time_difference = SystemTime::now().duration_since(SystemTime::from(parsed_time.unwrap()));
-
-    if time_difference.unwrap().as_secs() >10800  {
-        println!("Request expiry time reached");
-
+    if !tools::check_registry_expiry(&current_status, &client_last_event).unwrap_or(false) {
         update_flow_status(&message[0].from, &tracker_id, FlowStatus::RequestCanceled, None);
         send_error_message("Expiro el tiempo de la solicitud, inicia una solicitud nueva escribiendo 'Hola' en el chat", &message[0].from);
-    };
+    }
 
     // Executes step based on current status of request
     match current_status {
