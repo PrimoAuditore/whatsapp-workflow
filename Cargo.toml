@@ -13,4 +13,7 @@ ureq = {version = "2.5.0", features =["json"]}
 redis = {version="0.22.1", features = ["streams"]}
 uuid = {version="1.2.2", features=["fast-rng", "v4"]}
 time = "0.3.17"
+image = "0.24.5"
+aws-config = "0.52.0"
+aws-sdk-s3 = "0.22.0"
 

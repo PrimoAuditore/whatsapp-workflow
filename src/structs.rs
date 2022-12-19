@@ -7,6 +7,16 @@ pub struct Event {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct MediaData {
+    pub url: String,
+    pub mime_type: String,
+    pub sha256: String,
+    pub file_size: i32,
+    pub id: String,
+    pub messaging_product: String,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Entry {
     id: String,
     pub(crate) changes: Vec<Change>,
@@ -15,7 +25,7 @@ pub struct Entry {
 #[derive(Serialize, Deserialize)]
 pub struct Change {
     field: String,
-    pub(crate) value: ChangeValue
+    pub(crate) value: ChangeValue,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -24,7 +34,7 @@ pub struct ChangeValue {
     metadata: ChangeMetadata,
     contacts: Option<Vec<Contact>>,
     pub(crate) messages: Option<Vec<Message>>,
-    statuses: Option<Vec<Status>>
+    statuses: Option<Vec<Status>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,7 +43,7 @@ pub struct Status {
     status: String,
     timestamp: String,
     recipient_id: String,
-    conversation: Option<Conversation>
+    conversation: Option<Conversation>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -44,15 +54,14 @@ pub struct Conversation {
 
 #[derive(Serialize, Deserialize)]
 pub struct Origin {
-
     #[serde(alias = "type")]
-    origin_type: String
+    origin_type: String,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct ChangeMetadata {
     display_phone_number: String,
-    phone_number_id: String
+    phone_number_id: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -70,19 +79,25 @@ pub struct Message {
 
     #[serde(alias = "type")]
     pub(crate) message_type: String,
+    pub image: Option<Image>,
     pub(crate) text: Option<Text>,
     pub(crate) button: Option<Button>,
     pub(crate) interactive: Option<Interactive>,
+}
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Image {
+    pub caption: String,
+    pub mime_type: String,
+    pub sha256: String,
+    pub id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Interactive {
-
     #[serde(alias = "type")]
     interactive_type: String,
-    pub(crate) list_reply: ListReply
-
+    pub(crate) list_reply: ListReply,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -94,49 +109,46 @@ pub struct ListReply {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Button {
     payload: String,
-    pub(crate) text: String
+    pub(crate) text: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Context  {
+pub struct Context {
     from: String,
     id: String,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Profile {
-    name: String
+    name: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Text {
-    pub(crate) body: String
+    pub(crate) body: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ListChoice{
+pub struct ListChoice {
     pub title: String,
     pub id: String,
 }
 
-impl ListChoice{
-
-    pub fn new() -> ListChoice{
-        ListChoice{
+impl ListChoice {
+    pub fn new() -> ListChoice {
+        ListChoice {
             id: "".to_string(),
-            title: "".to_string()
+            title: "".to_string(),
         }
     }
 
-    pub fn title(&mut self, title:&str) -> &mut Self{
+    pub fn title(&mut self, title: &str) -> &mut Self {
         self.title = title.to_string();
         self
     }
 
-    pub fn id(&mut self, id:&str) -> &mut Self{
+    pub fn id(&mut self, id: &str) -> &mut Self {
         self.id = id.to_string();
         self
     }
 }
-
-
