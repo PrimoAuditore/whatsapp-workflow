@@ -10,7 +10,7 @@ use actix_web::cookie::time;
 use actix_web::cookie::time::macros::offset;
 use actix_web::cookie::time::{OffsetDateTime, UtcOffset};
 use aws_config::SdkConfig;
-use redis::{Commands, Value};
+use redis::{Commands, RedisError, RedisResult, ToRedisArgs, Value};
 use std::error::Error;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -85,6 +85,7 @@ pub fn create_request_tracker(stream_name: &str, track_id: &str) -> Result<Strin
         .arg("")
         .query(&mut con)?;
 
+    debug!("Create request tracker: {:?}", res);
     // TODO: Manage error from register creation
     Ok("ok".to_string())
 }
@@ -128,13 +129,14 @@ pub fn check_registry_expiry(
     Ok(true)
 }
 
+
 pub fn update_flow_status(
     stream_name: &str,
     last_register: &str,
     updated_status: FlowStatus,
     value: Option<String>,
     attached_file: Option<String>,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<String, RedisError> {
     let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
     let mut con = client.get_connection()?;
 
@@ -143,22 +145,25 @@ pub fn update_flow_status(
         Err(_) => panic!("SystemTime before UNIX EPOCH!"),
     };
 
-    let res = redis::cmd("XADD")
-        .arg(stream_name)
-        .arg("*")
-        .arg("track-id")
-        .arg(&last_register)
-        .arg("timestamp")
-        .arg(timestamp)
-        .arg("status-id")
-        .arg(updated_status as i32)
-        .arg("value")
-        .arg(value.unwrap_or("".to_string()))
-        .arg("attached_file")
-        .arg(attached_file.unwrap_or("".to_string()))
-        .query(&mut con)?;
 
-    Ok("ok".to_string())
+    let res:RedisResult<String> = con.xadd(stream_name, "*", &[
+        ("track-id", &last_register),
+        ("timestamp", &&*timestamp),
+        ("status-id", &&*(updated_status as i32).to_string()),
+        ("value", &&*value.unwrap_or("".to_string())),
+        ("attached_file", &&*attached_file.unwrap_or("".to_string()))]);
+
+
+    return match res {
+        Ok(register_id) => {
+            debug!("Register created with id: {}", register_id);
+            Ok(register_id)
+        }
+        Err(err) => {
+            error!("{}", err);
+            Err(err)
+        }
+    }
 }
 
 pub fn get_last_event(stream_name: &str) -> Result<FlowRegister, Box<dyn Error>> {
@@ -171,6 +176,7 @@ pub fn get_last_event(stream_name: &str) -> Result<FlowRegister, Box<dyn Error>>
         .expect("read");
 
     if srr.ids.len() > 1 {
+        error!("Expected 1 value, received more than one");
         panic!("Expected 1 value, received more than one");
     } else if srr.ids.len() == 0 {
         return Err("Error".into());
@@ -418,8 +424,8 @@ fn download_image(image_url: &str, image_name: &str) {
         .output()
         .expect("Failed to execute command");
 
-    println!("{}", String::from_utf8(output.stdout).unwrap());
-    println!("{}", String::from_utf8(output.stderr).unwrap());
+    debug!("Command stdout: {}", String::from_utf8(output.stdout).unwrap());
+    error!("Command stderr{}", String::from_utf8(output.stderr).unwrap());
 }
 
 fn get_image_url(image_id: &str) -> MediaData {
@@ -437,13 +443,13 @@ pub async fn upload_image(
 ) -> Result<String, Box<dyn Error>> {
     let image_name = format!("{}.jpeg", Uuid::new_v4().to_string());
 
-    println!("Obtaining image url");
+    debug!("Obtaining image url");
     let media_data = get_image_url(image_id.as_str());
 
-    println!("Downloading image");
+    debug!("Downloading image");
     download_image(media_data.url.as_str(), image_name.as_str());
 
-    println!("uploading image to S3");
+    debug!("uploading image to S3");
 
     s3_tools::upload_image(image_name.as_str(), config).await?;
 
