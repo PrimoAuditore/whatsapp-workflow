@@ -9,6 +9,10 @@ use std::env;
 use std::os::unix::raw::off_t;
 use std::process::Command;
 use uuid::Uuid;
+use crate::tools::FlowStatus::FlowStarted;
+
+#[macro_use]
+extern crate log;
 
 mod meta_requests;
 mod s3_tools;
@@ -19,10 +23,12 @@ static mut CONFIG: Option<SdkConfig> = None;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("region provider");
+    env_logger::init();
+
+    trace!("region provider");
     let region_provider = RegionProviderChain::default_provider().or_else("us-east-2");
 
-    println!("config creation");
+    trace!("config creation");
     unsafe { CONFIG = Some(aws_config::from_env().region(region_provider).load().await) }
 
     HttpServer::new(|| {
@@ -44,13 +50,21 @@ async fn hello() -> impl Responder {
 
 #[post("/test")]
 async fn test(req_body: String) -> impl Responder {
+    send_error_message("test error", "56936748406");
     HttpResponse::Ok().body("")
 }
 
 #[post("/webhook")]
 async fn events(req_body: String) -> impl Responder {
+
+    debug!("{}", req_body);
+
+
+
     // Check for required env variables
     if env::var("META_TOKEN").is_err() || env::var("REDIS_URL").is_err() {
+
+        error!("One or many env variables are not present");
         panic!("One or many env variables are not present");
     }
 
@@ -60,6 +74,11 @@ async fn events(req_body: String) -> impl Responder {
 
     // Parse json body to Event struct
     let data: structs::Event = serde_json::from_str(req_body.as_str()).unwrap();
+
+    if data.entry[0].changes[0].value.statuses.is_none() {
+        debug!("{}", req_body);
+    }
+
     let message = data.entry[0].changes[0]
         .value
         .messages
@@ -71,7 +90,9 @@ async fn events(req_body: String) -> impl Responder {
 
     // Creates a new flow if client has never had a request on the system
     if client_last_event.is_err() {
-        println!("create tracker id");
+
+        trace!("create tracker id");
+
         let uuid = Uuid::new_v4().to_string();
         create_request_tracker(&message[0].from, uuid.as_str());
 
@@ -126,21 +147,22 @@ async fn events(req_body: String) -> impl Responder {
         FlowStatus::ServiceModalSent => {
             // Sends modal for brand selection
 
-            if !message[0].clone().button.is_some() {
+            if !message[0].clone().interactive.is_some() {
                 // Message is not received from service button selection
-                meta_requests::send_error_message(
+                send_error_message(
                     "Por favor, seleccione una opcion en el mensaje anterior.",
                     phone_number,
                 );
             }
 
+
             // Check for constraints
-            if message[0].clone().button.unwrap().text == "Busqueda de repuesto" {
+            if message[0].clone().interactive.unwrap().button_reply.unwrap().id == "part-search" {
                 let update_response = update_flow_status(
                     &message[0].from,
                     &tracker_id,
                     FlowStatus::ServiceSelected,
-                    Some(message[0].clone().button.unwrap().text),
+                    Some(message[0].clone().interactive.unwrap().button_reply.unwrap().id),
                     None,
                 );
 
@@ -175,11 +197,11 @@ async fn events(req_body: String) -> impl Responder {
                 meta_requests::send_error_message("Por favor, presiona el boton 'Marcas', y seleccione la marca del vehiculo a consultar.", phone_number);
             }
 
-            println!(
+            debug!(
                 "option selected: {}",
-                message[0].clone().interactive.unwrap().list_reply.id
+                message[0].clone().interactive.unwrap().list_reply.unwrap().id
             );
-            let option_selected = message[0].clone().interactive.unwrap().list_reply.id;
+            let option_selected = message[0].clone().interactive.unwrap().list_reply.unwrap().id;
 
             if option_selected.contains("page-") {
                 let page: i32 = option_selected
@@ -191,7 +213,7 @@ async fn events(req_body: String) -> impl Responder {
                     .unwrap();
                 meta_requests::brand_list(phone_number, page);
             } else {
-                println!("Brand selected");
+                debug!("Brand selected");
                 let update_response_selection = update_flow_status(
                     &message[0].from,
                     &tracker_id,
@@ -214,7 +236,7 @@ async fn events(req_body: String) -> impl Responder {
         }
         FlowStatus::BrandSelected => {}
         FlowStatus::ModelModalSent => {
-            println!("model selected");
+            debug!("model selected");
 
             // Registers selected model and sends message requesting VIN.
             // More models option id: page-1-chevrolet
@@ -224,7 +246,7 @@ async fn events(req_body: String) -> impl Responder {
                 meta_requests::send_error_message("Por favor, presiona el boton 'Modelos', y seleccione el modelo del vehiculo a consultar.",phone_number);
             }
 
-            let option_selected = message[0].clone().interactive.unwrap().list_reply.id;
+            let option_selected = message[0].clone().interactive.unwrap().list_reply.unwrap().id;
 
             if option_selected.contains("page-") {
                 let page: i32 = option_selected
@@ -403,7 +425,7 @@ async fn validate(validation_parameters: HttpRequest) -> impl Responder {
         panic!("Received verification token is not equals to defined one")
     }
 
-    println!("{:?}", &param_map);
+    debug!("{:?}", &param_map);
 
     HttpResponse::Ok().body(param_map.get("hub.challenge").unwrap().to_string())
 }

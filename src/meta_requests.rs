@@ -6,23 +6,41 @@ use std::process::Command;
 use ureq::Response;
 
 pub(crate) fn service_message(phone_number: &str) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set(
             "Authorization",
             format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
         )
         .send_json(ureq::json!({
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": phone_number,
-        "type": "template",
-        "template": {
-            "name": "solicitud_vin_1",
-        "language": {
-                "code": "es"
-            }
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": phone_number,
+  "type": "interactive",
+  "interactive": {
+    "type": "button",
+    "body": {
+      "text": "Selecciona el servicio requerido."
+    },
+    "action": {
+      "buttons": [
+        {
+          "type": "reply",
+          "reply": {
+            "id": "part-search",
+            "title": "Busqueda de repuesto"
+          }
+        },
+        {
+          "type": "reply",
+          "reply": {
+            "id": "help",
+            "title": "Ayuda"
+          }
         }
-        }))?
+      ]
+    }
+  }
+}))?
         .into_string()
         .unwrap();
     Ok(())
@@ -43,15 +61,10 @@ pub(crate) fn get_media_url(media_id: &str) -> Result<MediaData, Box<dyn Error>>
 }
 
 pub(crate) fn get_image(image_url: &str) -> Result<(), Box<dyn Error>> {
-    // let resp = ureq::get("https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=924155428582924&ext=1671147070&hash=ATvuxxCAl4FdoCpJuo-weK8GVXgr7jMH1I1x3lMGT9N1Sg")
-    //     .set(
-    //         "Authorization",
-    //         format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
-    //     ).call().unwrap();
 
     let output = Command::new("curl")
         .arg("-X GET")
-        .arg(format!("'{}'", "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=924155428582924&ext=1671147430&hash=ATt2lYiLFQdJRXSw7q_Q6Jy6vEPJXb2L3Tsa9-5vlRDL7w"))
+        .arg(format!("'{}'", image_url))
         .arg(format!("-H 'Authorization: Bearer {}'",std::env::var("META_TOKEN").unwrap()).as_str())
         .arg("> media_file.jpeg.jpeg")
         .output()
@@ -61,7 +74,8 @@ pub(crate) fn get_image(image_url: &str) -> Result<(), Box<dyn Error>> {
 }
 
 pub(crate) fn help_request(phone_number: &str) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set(
             "Authorization",
             format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
@@ -84,23 +98,21 @@ pub(crate) fn help_request(phone_number: &str) -> Result<(), Box<dyn Error>> {
 }
 
 pub(crate) fn request_vin(phone_number: &str) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set(
             "Authorization",
             format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
         )
         .send_json(ureq::json!({
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": phone_number,
-        "type": "template",
-        "template": {
-            "name": "solicitud_vin_3",
-        "language": {
-                "code": "es"
-            }
+      "messaging_product": "whatsapp",
+      "recipient_type": "individual",
+      "to": phone_number,
+      "type": "text",
+      "text": {
+        "preview_url": false,
+        "body": "Ingrese *VIN* del vehículo."
         }
-        }))?
+    }))?
         .into_string()?;
 
     Ok(())
@@ -128,7 +140,7 @@ pub(crate) fn model_list(
 
     let model_json = serde_json::to_string(&models_list.unwrap()).unwrap();
 
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set(
             "Authorization",
             format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
@@ -172,7 +184,7 @@ pub(crate) fn brand_list(phone_number: &str, page: i32) -> Result<(), Box<dyn Er
 
     let make_json = serde_json::to_string(&make_list.unwrap()).unwrap();
 
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set(
             "Authorization",
             format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
@@ -207,31 +219,9 @@ pub(crate) fn brand_list(phone_number: &str, page: i32) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-fn execute_second_step(phone_number: &str) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
-        .set(
-            "Authorization",
-            format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
-        )
-        .send_json(ureq::json!({
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": phone_number,
-        "type": "template",
-        "template": {
-            "name": "solicitud_vin_2",
-        "language": {
-                "code": "es"
-            }
-        }
-        }))?
-        .into_string()?;
-
-    Ok(())
-}
 
 pub(crate) fn successfull_request(phone_number: &str) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set("Authorization", format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str())
         .send_json(ureq::json!(
             {
@@ -250,7 +240,7 @@ pub(crate) fn successfull_request(phone_number: &str) -> Result<(), Box<dyn Erro
 }
 
 pub(crate) fn request_part_description(phone_number: &str) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set("Authorization", format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str())
         .send_json(ureq::json!(
             {
@@ -269,7 +259,7 @@ pub(crate) fn request_part_description(phone_number: &str) -> Result<(), Box<dyn
 }
 
 pub(crate) fn new_request(phone_number: &str) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set(
             "Authorization",
             format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
@@ -294,7 +284,7 @@ pub fn send_error_message(
     error_message: impl Into<String>,
     phone_number: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let resp: String = ureq::post("https://graph.facebook.com/v15.0/109252135350289/messages")
+    let resp: String = ureq::post("https://graph.facebook.com/v15.0/110000391967238/messages")
         .set(
             "Authorization",
             format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),

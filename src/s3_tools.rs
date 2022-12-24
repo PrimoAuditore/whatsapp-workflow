@@ -18,15 +18,15 @@ pub async fn upload_image(
     config: &Option<SdkConfig>,
 ) -> Result<(), Box<dyn Error>> {
     let config_updated = config.clone().unwrap();
-    println!("Starting file creation");
+    debug!("Starting file creation");
     let client = Client::new(&config_updated);
 
     let bucket_name = std::env::var("MEDIA_BUCKET").unwrap();
     let file_path = format!("/tmp/{}", image_key);
-    println!("Obatining image data");
+    debug!("Obatining image data");
     let body = ByteStream::from_path(Path::new(file_path.as_str())).await;
 
-    println!("Executing image save");
+    debug!("Executing image save");
     let result = client
         .put_object()
         .bucket(bucket_name)
@@ -37,10 +37,10 @@ pub async fn upload_image(
 
     match result {
         Ok(_) => {
-            println!("Object created")
+            debug!("Object created")
         }
         Err(e) => {
-            panic!("{:?}", e.into_service_error().kind)
+            error!("{:?}", e.into_service_error().kind)
         }
     }
 

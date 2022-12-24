@@ -34,7 +34,7 @@ pub struct ChangeValue {
     metadata: ChangeMetadata,
     contacts: Option<Vec<Contact>>,
     pub(crate) messages: Option<Vec<Message>>,
-    statuses: Option<Vec<Status>>,
+    pub statuses: Option<Vec<Status>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -97,7 +97,8 @@ pub struct Image {
 pub struct Interactive {
     #[serde(alias = "type")]
     interactive_type: String,
-    pub(crate) list_reply: ListReply,
+    pub(crate) list_reply: Option<ListReply>,
+    pub button_reply: Option<ListReply>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
