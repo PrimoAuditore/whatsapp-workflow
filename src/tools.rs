@@ -73,7 +73,7 @@ pub fn create_request_tracker(stream_name: &str, track_id: &str) -> Result<Strin
     };
 
     let res = redis::cmd("XADD")
-        .arg(stream_name)
+        .arg(format!("request:{}", stream_name))
         .arg("*")
         .arg("track-id")
         .arg(track_id)
@@ -146,7 +146,7 @@ pub fn update_flow_status(
     };
 
 
-    let res:RedisResult<String> = con.xadd(stream_name, "*", &[
+    let res:RedisResult<String> = con.xadd(format!("request:{}", stream_name), "*", &[
         ("track-id", &last_register),
         ("timestamp", &&*timestamp),
         ("status-id", &&*(updated_status as i32).to_string()),
@@ -172,7 +172,7 @@ pub fn get_last_event(stream_name: &str) -> Result<FlowRegister, Box<dyn Error>>
     let mut con = client.get_connection().expect("conn");
 
     let srr: StreamRangeReply = con
-        .xrevrange_count(&stream_name, "+", "-", 1)
+        .xrevrange_count(format!("request:{}", &stream_name), "+", "-", 1)
         .expect("read");
 
     if srr.ids.len() > 1 {
