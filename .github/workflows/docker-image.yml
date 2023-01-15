@@ -7,6 +7,14 @@ on:
     branches: [ "feat/2.0.0" ]
 
 jobs:
+  
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: rust-cargo
+      uses: actions-rs/cargo@v1.0.1
+      with:
+        command: test --release
 
   build:
     runs-on: ubuntu-latest
