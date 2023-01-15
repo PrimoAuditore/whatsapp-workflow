@@ -1,256 +1,32 @@
-use redis::streams::{
-    StreamId, StreamKey, StreamMaxlen, StreamRangeReply, StreamReadOptions, StreamReadReply,
-};
-use std::collections::HashMap;
 extern crate redis;
-use crate::meta_requests::get_media_url;
-use crate::structs::{ListChoice, MediaData};
-use crate::{meta_requests, s3_tools};
-use actix_web::cookie::time;
-use actix_web::cookie::time::macros::offset;
-use actix_web::cookie::time::{OffsetDateTime, UtcOffset};
-use aws_config::SdkConfig;
-use redis::{Commands, RedisError, RedisResult, ToRedisArgs, Value};
+
+use std::collections::HashMap;
+use std::env::Args;
 use std::error::Error;
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+
+use aws_config::SdkConfig;
+use redis::Commands;
 use uuid::Uuid;
+use crate::constants::MessageType;
+use crate::s3_tools;
 
-pub enum FlowStatus {
-    FlowStarted = 1,
-    ServiceModalSent = 2,
-    ServiceSelected = 3,
-    BrandModalSent = 4,
-    BrandSelected = 5,
-    ModelModalSent = 6,
-    ModelSelected = 7,
-    VinRequestSent = 8,
-    VinProvided = 9,
-    PartDescriptionRequested = 10,
-    PartDescriptionProvided = 11,
-    RequestAccepted = 12,
-    PartFound = 13,
-    RequestCanceled = 14,
-}
+use crate::structs::{Event, ListChoice, MediaData, MessageRequest, StandardResponse};
 
-impl FlowStatus {
-    pub fn get_from_value(i: &String) -> FlowStatus {
-        let status_id = i.parse().unwrap();
-        match status_id {
-            1 => FlowStatus::FlowStarted,
-            2 => FlowStatus::ServiceModalSent,
-            3 => FlowStatus::ServiceSelected,
-            4 => FlowStatus::BrandModalSent,
-            5 => FlowStatus::BrandSelected,
-            6 => FlowStatus::ModelModalSent,
-            7 => FlowStatus::ModelSelected,
-            8 => FlowStatus::VinRequestSent,
-            9 => FlowStatus::VinProvided,
-            10 => FlowStatus::PartDescriptionRequested,
-            11 => FlowStatus::PartDescriptionProvided,
-            12 => FlowStatus::RequestAccepted,
-            13 => FlowStatus::PartFound,
-            14 => FlowStatus::RequestCanceled,
-            _ => panic!("Value not found"),
-        }
-    }
-}
-
-fn create_client() -> Result<redis::Connection, Box<dyn Error>> {
-    let client = redis::Client::open("redis://127.0.0.1/")?;
-    let mut con = client.get_connection()?;
-
-    Ok(con)
-}
-
-pub fn create_request_tracker(stream_name: &str, track_id: &str) -> Result<String, Box<dyn Error>> {
-    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
-    let mut con = client.get_connection()?;
-
-    let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(n) => n.as_millis().to_string(),
-        Err(_) => panic!("SystemTime before UNIX EPOCH!"),
-    };
-
-    let res = redis::cmd("XADD")
-        .arg(format!("request:{}", stream_name))
-        .arg("*")
-        .arg("track-id")
-        .arg(track_id)
-        .arg("timestamp")
-        .arg(timestamp)
-        .arg("status-id")
-        .arg(FlowStatus::FlowStarted as i32)
-        .arg("value")
-        .arg("")
-        .query(&mut con)?;
-
-    debug!("Create request tracker: {:?}", res);
-    // TODO: Manage error from register creation
-    Ok("ok".to_string())
-}
-
-pub fn check_registry_expiry(
-    current_status: &FlowStatus,
-    client_last_event: &Result<FlowRegister, Box<dyn Error>>,
-) -> Result<bool, Box<dyn Error>> {
-    let time_as_integer = &client_last_event
-        .as_ref()
-        .unwrap()
-        .timestamp
-        .as_ref()
-        .unwrap()
-        .parse::<i64>()
+pub(crate) fn get_media_url(media_id: &str) -> Result<MediaData, Box<dyn Error>> {
+    let resp: String = ureq::get(format!("https://graph.facebook.com/v15.0/{}", media_id).as_str())
+        .set(
+            "Authorization",
+            format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
+        )
+        .call()?
+        .into_string()
         .unwrap();
-    let parsed_time =
-        OffsetDateTime::from_unix_timestamp(*time_as_integer / 1000)?.to_offset(offset!(-3));
-    let time_difference = SystemTime::now().duration_since(SystemTime::from(parsed_time));
 
-    // If last register has more than 3 hours
-    if time_difference.unwrap().as_secs() > 10800 {
-        match current_status {
-            FlowStatus::FlowStarted
-            | FlowStatus::ServiceModalSent
-            | FlowStatus::ServiceSelected
-            | FlowStatus::BrandModalSent
-            | FlowStatus::BrandSelected
-            | FlowStatus::ModelModalSent
-            | FlowStatus::ModelSelected
-            | FlowStatus::VinRequestSent
-            | FlowStatus::VinProvided
-            | FlowStatus::PartDescriptionRequested
-            | FlowStatus::PartDescriptionProvided => {
-                return Ok(false);
-            }
-            _ => return Ok(true),
-        }
-    };
-
-    Ok(true)
+    let media_data: MediaData = serde_json::from_str(resp.as_str()).unwrap();
+    Ok(media_data)
 }
 
-
-pub fn update_flow_status(
-    stream_name: &str,
-    last_register: &str,
-    updated_status: FlowStatus,
-    value: Option<String>,
-    attached_file: Option<String>,
-) -> Result<String, RedisError> {
-    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
-    let mut con = client.get_connection()?;
-
-    let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(n) => n.as_millis().to_string(),
-        Err(_) => panic!("SystemTime before UNIX EPOCH!"),
-    };
-
-
-    let res:RedisResult<String> = con.xadd(format!("request:{}", stream_name), "*", &[
-        ("track-id", &last_register),
-        ("timestamp", &&*timestamp),
-        ("status-id", &&*(updated_status as i32).to_string()),
-        ("value", &&*value.unwrap_or("".to_string())),
-        ("attached_file", &&*attached_file.unwrap_or("".to_string()))]);
-
-
-    return match res {
-        Ok(register_id) => {
-            debug!("Register created with id: {}", register_id);
-            Ok(register_id)
-        }
-        Err(err) => {
-            error!("{}", err);
-            Err(err)
-        }
-    }
-}
-
-pub fn get_last_event(stream_name: &str) -> Result<FlowRegister, Box<dyn Error>> {
-    let client = redis::Client::open(std::env::var("REDIS_URL").unwrap())?;
-
-    let mut con = client.get_connection().expect("conn");
-
-    let srr: StreamRangeReply = con
-        .xrevrange_count(format!("request:{}", &stream_name), "+", "-", 1)
-        .expect("read");
-
-    if srr.ids.len() > 1 {
-        error!("Expected 1 value, received more than one");
-        panic!("Expected 1 value, received more than one");
-    } else if srr.ids.len() == 0 {
-        return Err("Error".into());
-    }
-
-    let flow_register = FlowRegisterBuilder::new()
-        .tracker_id(parse_value_bytes(srr.ids[0].map.get("track-id").unwrap().clone()).unwrap())
-        .timestamp(parse_value_bytes(srr.ids[0].map.get("timestamp").unwrap().clone()).unwrap())
-        .status_id(parse_value_bytes(srr.ids[0].map.get("status-id").unwrap().clone()).unwrap())
-        .build();
-
-    Ok(flow_register.unwrap())
-}
-
-fn parse_value_bytes(value: Value) -> Result<String, &'static str> {
-    let val = if let Value::Data(bytes) = value {
-        let parsed_string: String = String::from_utf8(bytes).expect("utf8");
-        Ok(parsed_string)
-    } else {
-        Err("weird data")
-    };
-
-    val
-}
-
-pub struct FlowRegister {
-    pub tracker_id: Option<String>,
-    pub timestamp: Option<String>,
-    pub status_id: Option<String>,
-    pub value: Option<String>,
-}
-
-#[derive(Default)]
-struct FlowRegisterBuilder {
-    tracker_id: Option<String>,
-    timestamp: Option<String>,
-    status_id: Option<String>,
-    value: Option<String>,
-}
-
-impl FlowRegisterBuilder {
-    pub fn new() -> FlowRegisterBuilder {
-        FlowRegisterBuilder::default()
-    }
-
-    pub fn tracker_id(&mut self, tracker_id: impl Into<String>) -> &mut Self {
-        self.tracker_id = Some(tracker_id.into());
-        self
-    }
-
-    pub fn timestamp(&mut self, timestamp: impl Into<String>) -> &mut Self {
-        self.timestamp = Some(timestamp.into());
-        self
-    }
-
-    pub fn status_id(&mut self, status_id: impl Into<String>) -> &mut Self {
-        self.status_id = Some(status_id.into());
-        self
-    }
-
-    pub fn value(&mut self, value: impl Into<String>) -> &mut Self {
-        self.value = Some(value.into());
-        self
-    }
-
-    pub fn build(&self) -> Result<FlowRegister, Box<dyn Error>> {
-        Ok(FlowRegister {
-            tracker_id: self.tracker_id.clone(),
-            timestamp: self.timestamp.clone(),
-            status_id: self.status_id.clone(),
-            value: self.value.clone(),
-        })
-    }
-}
 
 pub(crate) fn validate_vin(vin: String) -> bool {
     let translitering_chart: HashMap<&str, u32> = HashMap::from([
@@ -424,12 +200,18 @@ fn download_image(image_url: &str, image_name: &str) {
         .output()
         .expect("Failed to execute command");
 
-    debug!("Command stdout: {}", String::from_utf8(output.stdout).unwrap());
-    error!("Command stderr{}", String::from_utf8(output.stderr).unwrap());
+    debug!(
+        "Command stdout: {}",
+        String::from_utf8(output.stdout).unwrap()
+    );
+    error!(
+        "Command stderr{}",
+        String::from_utf8(output.stderr).unwrap()
+    );
 }
 
 fn get_image_url(image_id: &str) -> MediaData {
-    let request = meta_requests::get_media_url(image_id);
+    let request = get_media_url(image_id);
 
     match request {
         Ok(media) => media,
@@ -439,8 +221,14 @@ fn get_image_url(image_id: &str) -> MediaData {
 
 pub async fn upload_image(
     image_id: String,
-    config: &Option<SdkConfig>,
 ) -> Result<String, Box<dyn Error>> {
+    let config = s3_tools::create_config().await;
+
+    if config.is_none() {
+        panic!("AWS config not available")
+    }
+
+
     let image_name = format!("{}.jpeg", Uuid::new_v4().to_string());
 
     debug!("Obtaining image url");
@@ -451,7 +239,88 @@ pub async fn upload_image(
 
     debug!("uploading image to S3");
 
-    s3_tools::upload_image(image_name.as_str(), config).await?;
+    s3_tools::upload_image_to_s3(image_name.as_str(), config.unwrap()).await?;
 
     Ok(image_name)
 }
+
+
+pub fn get_message_content(event: &Event) -> String {
+    let message = event.entry[0].changes[0].value.messages.as_ref().unwrap();
+    match message[0].message_type.as_str() {
+        "text" => {
+            message[0]
+                .clone()
+                .text
+                .unwrap()
+                .body
+        }
+        "interactive" =>{
+            if message[0].interactive.as_ref().unwrap().button_reply.as_ref().is_some(){
+                &message[0].interactive.as_ref().unwrap().button_reply.as_ref().unwrap().id
+            } else if message[0].interactive.as_ref().unwrap().list_reply.as_ref().is_some(){
+                &message[0].interactive.as_ref().unwrap().list_reply.as_ref().unwrap().id
+            }else{
+                panic!("message type no supported")
+            }.to_string()
+        },
+        "image" => {
+            message[0]
+                .clone()
+                .image
+                .unwrap()
+                .caption
+        }
+        _ => {
+            panic!("Message type not supported")
+        }
+    }.to_string()
+}
+
+pub fn find_message_type(event: &Event) -> MessageType {
+    let message = event.entry[0].changes[0].value.messages.as_ref().unwrap();
+    match message[0].message_type.as_str() {
+        "text" => {
+            MessageType::PlainText
+
+        },
+        "interactive" =>{
+            if message[0].interactive.as_ref().unwrap().button_reply.is_some(){
+                MessageType::ButtonSelection
+            } else if message[0].interactive.as_ref().unwrap().list_reply.is_some(){
+                MessageType::ListSelection
+            }else{
+                panic!("message type no supported")
+            }
+        },
+        "image" => {
+            MessageType::PlainTextAndImage
+        }
+        _ => {
+            panic!("Message type not supported: {}", message[0].message_type.as_str())
+        }
+    }
+}
+
+pub fn send_message(message: MessageRequest) -> Result<StandardResponse, String> {
+
+    debug!("Sending message with payload: \n {}", ureq::json!(message));
+    let url = std::env::var("WHATSAPP_MANAGER_HOST").unwrap();
+
+    let resp = ureq::post(format!("{}/message", url).as_str())
+        .set(
+            "Authorization",
+            format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
+        )
+        .send_json(ureq::json!(message)).unwrap()
+        .into_string();
+
+    if resp.is_err() {
+        return Err(resp.unwrap_err().to_string())
+    }
+
+    let parsed_response: StandardResponse = serde_json::from_str(&resp.unwrap()).unwrap();
+
+    Ok(parsed_response)
+}
+

@@ -1,25 +1,17 @@
-use actix_web::rt::task::spawn_blocking;
-use actix_web::web::block;
-use actix_web::Handler;
-use aws_config::meta::region::RegionProviderChain;
 use aws_config::SdkConfig;
-use aws_sdk_s3::error::PutObjectError;
-use aws_sdk_s3::output::PutObjectOutput;
-use aws_sdk_s3::types::{ByteStream, SdkError};
-use aws_sdk_s3::{Client, Config};
+use aws_sdk_s3::types::{ByteStream};
+use aws_sdk_s3::{Client};
 use std::error::Error;
-use std::fs::File;
-use std::os::unix::io::FromRawFd;
 use std::path::Path;
-use std::sync::{Arc, Once};
+use aws_config::meta::region::RegionProviderChain;
 
-pub async fn upload_image(
+pub async fn upload_image_to_s3(
     image_key: &str,
-    config: &Option<SdkConfig>,
+    config: SdkConfig,
 ) -> Result<(), Box<dyn Error>> {
-    let config_updated = config.clone().unwrap();
+
     debug!("Starting file creation");
-    let client = Client::new(&config_updated);
+    let client = Client::new(&config);
 
     let bucket_name = std::env::var("MEDIA_BUCKET").unwrap();
     let file_path = format!("/tmp/{}", image_key);
@@ -45,4 +37,12 @@ pub async fn upload_image(
     }
 
     Ok(())
+}
+
+pub async fn create_config() -> Option<SdkConfig> {
+    trace!("region provider");
+    let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
+
+    trace!("config creation");
+    Some(aws_config::from_env().region(region_provider).load().await)
 }
