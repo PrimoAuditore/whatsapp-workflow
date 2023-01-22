@@ -146,6 +146,32 @@ pub async fn outgoing_message(log: MessageLog) -> Result<StandardResponse, Stand
 
         let status = FlowStatus::get_from_value(&step.unwrap().status);
 
+
+        // If request is completed generate a log to channel so the request classification system can be notified
+        if status == FlowStatus::RequestAccepted {
+
+            let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+                Ok(n) => n.as_millis().to_string(),
+                Err(_) => panic!("SystemTime before UNIX EPOCH!"),
+            };
+
+            let accepted_log = MessageLog {
+                timestamp: timestamp,
+                destination_systems: vec![5.to_string()],
+                origin_system: "3".to_string(),
+                phone_number: log.phone_number.clone(),
+                origin: "OUTGOING".to_string(),
+                register_id: log.register_id.clone(),
+            };
+
+            publish_message(&accepted_log, &log.phone_number);
+
+            response.errors = None;
+            response.references = references;
+            return Ok(response)
+
+        }
+
         info!("Current flow status: {:?}", status);
         let next_step_id = if status.value().next_step.is_some() {
              (status.value().next_step.unwrap() as u16).to_string()

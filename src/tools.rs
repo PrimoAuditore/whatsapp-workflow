@@ -324,3 +324,20 @@ pub fn send_message(message: MessageRequest) -> Result<StandardResponse, String>
     Ok(parsed_response)
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::tools::validate_vin;
+
+    #[test]
+    fn validate_vin_ok() {
+        let vin = validate_vin("11111111111111111".to_string());
+        assert_eq!(vin, true)
+    }
+
+    #[test]
+    fn validate_vin_fail() {
+        let vin = validate_vin("1111111111111111".to_string());
+        assert_eq!(vin, false)
+    }
+}
+
