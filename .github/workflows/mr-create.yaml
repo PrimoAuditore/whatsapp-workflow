@@ -64,6 +64,8 @@ jobs:
       ENV_REDIS_URL: ${{ secrets.ENV_REDIS_URL }}
       ENV_RUST_LOG: ${{ secrets.ENV_RUST_LOG }}
       ENV_META_TOKEN: ${{ secrets.ENV_META_TOKEN }}
+      ENV_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      ENV_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       APP_PR: ${{github.event.pull_request.number}}
       APP_NAMESPACE: ${{ vars.APP_NAMESPACE }}
       APP_IMAGE: ${{ vars.APP_IMAGE }}
