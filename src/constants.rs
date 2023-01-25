@@ -1,11 +1,12 @@
 use std::string::ToString;
 use enum_iterator::{all, cardinality, first, last, next, previous, reverse_all, Sequence};
+use fizzy_commons::shared_structs::{ListMessage, MessageContent, MessageRequest};
 use serde::de::Unexpected::Str;
 use crate::constants::FlowStatus::{BrandModalSent, BrandSelected, IdentificationRequestSent, ModelModalSent, ModelSelected, PartDescriptionProvided, RequestAccepted};
 
 use crate::constants::FlowStatusId::{BrandModalSentId, BrandSelectedId, FlowStartedId, IdentificationProvidedId, IdentificationRequestSentId, ModelModalSentId, ModelSelectedId, PartDescriptionProvidedId, PartDescriptionRequestedId, RequestAcceptedId};
 use crate::constants::MessageType::{ListSelection, NoResponse, PlainText, PlainTextAndImage};
-use crate::structs::{ListMessage, MessageContent, MessageRequest, StepDefinition};
+use crate::structs::{StepDefinition};
 
 pub const SYSTEM_ID: u8 = 3;
 pub const PART_CLASSIFICATION_SYSTEM_ID: u8 = 4;

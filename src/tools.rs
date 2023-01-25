@@ -6,12 +6,13 @@ use std::error::Error;
 use std::process::Command;
 
 use aws_config::SdkConfig;
+use fizzy_commons::shared_structs::MessageRequest;
 use redis::Commands;
 use uuid::Uuid;
 use crate::constants::MessageType;
 use crate::s3_tools;
 
-use crate::structs::{Event, ListChoice, MediaData, MessageRequest, StandardResponse};
+use crate::structs::{Event, ListChoice, MediaData, StandardResponse};
 
 pub(crate) fn get_media_url(media_id: &str) -> Result<MediaData, Box<dyn Error>> {
     let resp: String = ureq::get(format!("https://graph.facebook.com/v15.0/{}", media_id).as_str())
@@ -247,6 +248,7 @@ pub async fn upload_image(
 
 pub fn get_message_content(event: &Event) -> String {
     let message = event.entry[0].changes[0].value.messages.as_ref().unwrap();
+    info!("Obtaining message content for type {}", message[0].message_type.as_str());
     match message[0].message_type.as_str() {
         "text" => {
             message[0]
@@ -304,14 +306,12 @@ pub fn find_message_type(event: &Event) -> MessageType {
 
 pub fn send_message(message: MessageRequest) -> Result<StandardResponse, String> {
 
+    info!("{}", ureq::json!(message));
+
     debug!("Sending message with payload: \n {}", ureq::json!(message));
     let url = std::env::var("WHATSAPP_MANAGER_HOST").unwrap();
 
     let resp = ureq::post(format!("{}/message", url).as_str())
-        .set(
-            "Authorization",
-            format!("Bearer {}", std::env::var("META_TOKEN").unwrap()).as_str(),
-        )
         .send_json(ureq::json!(message)).unwrap()
         .into_string();
 

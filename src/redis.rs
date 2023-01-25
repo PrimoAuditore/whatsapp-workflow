@@ -229,17 +229,30 @@ pub fn create_new_step(step: &TrackerStep) -> Result<String, RedisError> {
     return Ok(format!("whatsapp-workflow:{}", &step.id));
 }
 
-pub fn get_list(key: String)-> Result<Vec<String>, RedisError>{
+pub fn get_list(key: String, from: usize, to: usize) -> Result<Vec<String>, RedisError>{
     let client = create_client().unwrap();
     let mut con = client.get_connection().unwrap();
 
-    let list_res:RedisResult<Vec<String>> = con.lrange(key, 0, 1000);
+    let list_res:RedisResult<Vec<String>> = con.lrange(key, from as isize, to as isize);
 
     if list_res.is_err() {
         return Err(list_res.unwrap_err())
     }
 
     Ok(list_res.unwrap())
+}
+
+pub fn get_list_size(key: &str)-> Result<u16, RedisError>{
+    let client = create_client().unwrap();
+    let mut con = client.get_connection().unwrap();
+
+    let list_size:RedisResult<u16> = con.llen(key);
+
+    if list_size.is_err() {
+        return Err(list_size.unwrap_err())
+    }
+
+    Ok(list_size.unwrap())
 }
 
 pub fn publish_message(
@@ -328,4 +341,5 @@ pub fn get_step_by_status(tracker_id: &str, status: &str) -> Result<TrackerStep,
 
     Ok(trackerStep)
 }
+
 

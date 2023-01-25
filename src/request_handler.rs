@@ -1,11 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use aws_config::SdkConfig;
+use fizzy_commons::shared_structs::MessageRequest;
 use log::Level::Info;
 use redis::RedisError;
 use regex::Regex;
 use serde::de::Unexpected::Str;
 use crate::redis::{create_new_step, create_new_tracker, get_last_tracker, get_last_tracker_step, get_user_message, publish_message};
-use crate::structs::{Event, MessageLog, MessageRequest, ModifiedReference, StandardResponse, TrackerStep};
+use crate::structs::{Event, MessageLog, ModifiedReference, StandardResponse, TrackerStep};
 use uuid::Uuid;
 use crate::constants::{FlowStatus, MessageType, ResponseStatus};
 use crate::step_functions::execute_function;
@@ -356,8 +357,8 @@ pub async fn incoming_message(log: MessageLog) -> Result<StandardResponse, Stand
         response.errors = Some(errors);
         return Err(response)
     }
-
-    let next_step = FlowStatus::get_from_value(&format!("{:?}", *status.value().next_step.as_ref().unwrap() as u16));
+    let next_step_status = status.value().next_step.unwrap() as u16;
+    let next_step = FlowStatus::get_from_value(&next_step_status.to_string());
     info!("Next step found");
     debug!("Next step found: {:?}", &next_step);
 
@@ -374,24 +375,22 @@ pub async fn incoming_message(log: MessageLog) -> Result<StandardResponse, Stand
     info!("Next step requires user response");
 
     // Filter step based if message type fits required response type(plain text, plain text with image, list selection, button selection)
-    let message_type = find_message_type(&message.as_ref().unwrap());
+    let message_type = find_message_type(message.as_ref().unwrap());
 
     info!("Message type expected found");
     debug!("Message type expected found: {:?}", &message_type);
 
-    if next_step.value().required_response.is_some() {
-        if next_step.value().required_response.unwrap() != message_type  {
-            errors.push(format!("Message type {:?} doesnt match with the next step required message type {:?}", message_type, next_step).to_string());
+    if next_step.value().required_response.is_some() && next_step.value().required_response.unwrap() != message_type {
+        errors.push(format!("Message type {:?} doesnt match with the next step required message type {:?}", message_type, next_step));
 
-            // TODO: implement a solution that doesnt throws an error when request is finished in last status
-            response.errors = Some(errors);
-            return Err(response)
-        }
+        // TODO: implement a solution that doesnt throws an error when request is finished in last status
+        response.errors = Some(errors);
+        return Err(response)
     }
 
     // Obtaining message content
     info!("Obtaining content from message reference");
-    let message_content = get_message_content(&message.as_ref().unwrap());
+    let message_content = get_message_content(message.as_ref().unwrap());
 
     // Filter based on regex(if defined)
     info!("Proceeding to evaluate regex");
@@ -435,18 +434,6 @@ pub async fn incoming_message(log: MessageLog) -> Result<StandardResponse, Stand
         message_reference: String::from(&log.register_id.clone()),
     };
 
-    // Updated request status
-    let step_res = create_new_step(&new_step);
-
-    if step_res.is_err() {
-        errors.push(format!("Unable to create new step: {}", step_res.as_ref().unwrap_err()));
-
-        response.errors = Some(errors);
-        return Err(response)
-    }
-
-
-    references.push(ModifiedReference{ system: "REDIS".to_string(), reference: step_res.as_ref().unwrap().clone() });
 
 
     // Execute handler function
@@ -460,7 +447,7 @@ pub async fn incoming_message(log: MessageLog) -> Result<StandardResponse, Stand
     // SEND MESSAGE
     let res = parsed_message.unwrap();
 
-    debug!("{:?}", serde_json::to_string(&res));
+    info!("{:?}", serde_json::to_string(&res));
     let res = send_message(res);
 
     if res.is_err() {
@@ -470,18 +457,37 @@ pub async fn incoming_message(log: MessageLog) -> Result<StandardResponse, Stand
         return Err(response)
     }
 
-    // PUBLISH MESSAGE TO CHANNEL
-    let new_log = MessageLog{
-        timestamp: timestamp.clone(),
-        destination_systems: vec!["3".to_string()],
-        origin_system: "3".to_string(),
-        phone_number: log.phone_number.to_string(),
-        origin: "OUTGOING".to_string(),
-        register_id: String::from(&res.as_ref().unwrap().references[0].reference),
-    };
+    // Updated request status
+    let step_res = create_new_step(&new_step);
+
+    if step_res.is_err() {
+        errors.push(format!("Unable to create new step: {}", step_res.as_ref().unwrap_err()));
+
+        response.errors = Some(errors);
+        return Err(response)
+    }
+
+    references.push(ModifiedReference{ system: "REDIS".to_string(), reference: step_res.as_ref().unwrap().clone() });
 
 
-    publish_message(&new_log, &log.phone_number);
+    info!("Next step status: {}, step: {}", new_step.status , step.as_ref().unwrap().status);
+    if new_step.status != step.as_ref().unwrap().status {
+
+        // Update if current status is different to computed next status
+        // PUBLISH MESSAGE TO CHANNEL
+        let new_log = MessageLog{
+            timestamp: timestamp.clone(),
+            destination_systems: vec!["3".to_string()],
+            origin_system: "3".to_string(),
+            phone_number: log.phone_number.to_string(),
+            origin: "OUTGOING".to_string(),
+            register_id: String::from(&res.as_ref().unwrap().references[0].reference),
+        };
+
+
+        publish_message(&new_log, &log.phone_number);
+
+    }
 
 
     response.errors = None;

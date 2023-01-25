@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use fizzy_commons::shared_structs::MessageRequest;
 use serde::{Deserialize, Serialize};
 use crate::constants::{FlowStatusId, MessageType, ResponseStatus};
 
@@ -207,25 +208,25 @@ pub struct TrackerStep{
 
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct MessageRequest {
-    pub system_id: u8,
-    pub to: Vec<String>,
-    pub message_type: String,
-    pub content: MessageContent,
-}
-#[derive(Serialize, Deserialize, Clone)]
-pub struct MessageContent {
-    pub body: Option<String>,
-    pub list: Option<ListMessage>,
-    pub buttons: Option<ButtonMessage>,
-}
+// #[derive(Serialize, Deserialize, Clone)]
+// pub struct MessageRequest {
+//     pub system_id: u8,
+//     pub to: Vec<String>,
+//     pub message_type: String,
+//     pub content: MessageContent,
+// }
+// #[derive(Serialize, Deserialize, Clone)]
+// pub struct MessageContent {
+//     pub body: Option<String>,
+//     pub list: Option<ListMessage>,
+//     pub buttons: Option<ButtonMessage>,
+// }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ListMessage {
-    pub(crate) title: String,
-    pub(crate) choices: Vec<String>,
-}
+// #[derive(Serialize, Deserialize, Clone)]
+// pub struct ListMessage {
+//     pub(crate) title: String,
+//     pub(crate) choices: Vec<String>,
+// }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ButtonMessage {
