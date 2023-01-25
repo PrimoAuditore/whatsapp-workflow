@@ -17,5 +17,5 @@ RUN --mount=type=ssh cargo build --release
 
 FROM debian:11-slim
 WORKDIR /app
-COPY --from=build /app/target/release/whatsapp-manager ./whatsapp-manager
+COPY --from=build /app/target/release/vin-webhook ./vin-webhook
 CMD ["./vin-webhook"]
