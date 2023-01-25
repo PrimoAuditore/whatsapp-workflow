@@ -71,5 +71,6 @@ jobs:
       APP_IMAGE: ${{ vars.APP_IMAGE }}
       APP_NAME: ${{ vars.APP_NAME}}
       APP_INGRESS_PATH: ${{ vars.APP_INGRESS_PATH}}
+      ENV_WHATSAPP_MANAGER_HOST: ${{ secrets.WHATSAPP_MANAGER_HOST }}
       ENV_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       ENV_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
