@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+use fizzy_commons::shared_structs::MessageRequest;
 use serde::{Deserialize, Serialize};
+use crate::constants::{FlowStatusId, MessageType, ResponseStatus};
 
 #[derive(Serialize, Deserialize)]
 pub struct Event {
@@ -152,4 +155,93 @@ impl ListChoice {
         self.id = id.to_string();
         self
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct MessageLog {
+    pub timestamp: String,
+    pub destination_systems: Vec<String>,
+    pub origin_system: String,
+    pub phone_number: String,
+    pub origin: String,
+    pub register_id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StandardResponse {
+    pub references: Vec<ModifiedReference>,
+    pub errors: Option<Vec<String>>,
+}
+
+impl StandardResponse {
+    pub fn new() -> StandardResponse {
+        StandardResponse {
+            references: vec![],
+            errors: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ModifiedReference {
+    pub(crate) system: String,
+    pub(crate) reference: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RequestTracker{
+    pub(crate) phone_number: String,
+    pub(crate) timestamp: String,
+    pub(crate) id: String
+
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TrackerStep{
+    pub(crate) tracker_id: String,
+    pub(crate) timestamp: String,
+    pub(crate) id: String,
+    pub(crate) status: String,
+    pub(crate) value: String,
+    pub(crate) attached_files: String,
+    pub(crate) message_reference: String,
+
+}
+
+// #[derive(Serialize, Deserialize, Clone)]
+// pub struct MessageRequest {
+//     pub system_id: u8,
+//     pub to: Vec<String>,
+//     pub message_type: String,
+//     pub content: MessageContent,
+// }
+// #[derive(Serialize, Deserialize, Clone)]
+// pub struct MessageContent {
+//     pub body: Option<String>,
+//     pub list: Option<ListMessage>,
+//     pub buttons: Option<ButtonMessage>,
+// }
+
+// #[derive(Serialize, Deserialize, Clone)]
+// pub struct ListMessage {
+//     pub(crate) title: String,
+//     pub(crate) choices: Vec<String>,
+// }
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ButtonMessage {
+    pub title: String,
+    pub choices: Vec<String>,
+}
+
+
+pub struct StepDefinition {
+    // Requirements to create this step
+    pub(crate) required_response: Option<MessageType>, // Required response type in order to create a step
+    pub(crate) validation_regex: Option<String>, // Required body regex in order to create a step
+
+    // Behaviour in case the step can be created
+    pub(crate) next_step: Option<FlowStatusId>, // Next step depending on this step definition
+    pub(crate) successful_response: Option<MessageRequest>, // Response to user in case the step can be created
+    pub(crate) data_origin: Option<String>, // Origin of redis data for lists and button replies
 }

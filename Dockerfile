@@ -1,16 +1,21 @@
 FROM rust:slim as build
 
+RUN apt-get update && \
+    apt-get install -y \
+        git \
+        openssh-server \
+        openssh-client
+
 ENV META_TOKEN=""
 ENV REDIS_URL=""
-ENV MEDIA_BUCKET=""
+ARG SSH_KEY
 
 WORKDIR /app
 COPY . .
-RUN cargo build --release
+RUN --mount=type=ssh cargo build --release
+
 
 FROM debian:11-slim
-RUN apt update && apt install -y ca-certificates curl
 WORKDIR /app
 COPY --from=build /app/target/release/vin-webhook ./vin-webhook
-COPY --from=build /app/download-image.sh ./download-image.sh
 CMD ["./vin-webhook"]
