@@ -180,12 +180,14 @@ pub async fn outgoing_message(log: MessageLog) -> Result<StandardResponse, Stand
             (status as u16).to_string()
         };
 
-        if FlowStatus::get_from_value(&next_step_id.to_string()).value().required_response.is_none() {
+        let next_step = FlowStatus::get_from_value(&next_step_id.to_string());
 
-            let next_step =FlowStatus::get_from_value(&(status.value().next_step.unwrap() as u16).to_string());
+        info!("Next step is {next_step:?}");
+        if next_step.value().required_response.is_none() {
 
-            // SEND system message
-            info!("Handling next status flow");
+            info!("Step {next_step:?} requires response");
+
+
             let uuid_step = Uuid::new_v4().to_string().replace("-", "");
 
             let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -203,7 +205,7 @@ pub async fn outgoing_message(log: MessageLog) -> Result<StandardResponse, Stand
                 message_reference: String::from(&log.register_id.clone()),
             };
 
-            info!("Building new step");
+            info!("Executing {next_step:?} handler function");
             let parsed_message: Result<MessageRequest, String> = execute_function(&mut new_step, next_step, &log, "").await;
 
             if parsed_message.is_err() {

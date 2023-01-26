@@ -276,7 +276,7 @@ pub fn reset_user_mode(phone_number:&str) -> Result<(), String>{
     let client = create_client().unwrap();
     let mut con = client.get_connection().unwrap();
 
-    let res: RedisResult<String> = con.hset(format!("selected-mode:{}", phone_number), "mode", "100");
+    let res: RedisResult<u16> = con.hset(format!("selected-mode:{}", phone_number), "mode", "100");
 
     if res.is_err() {
         error!("Error reseting user mode: {}", res.as_ref().unwrap_err());

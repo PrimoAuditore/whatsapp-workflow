@@ -343,10 +343,43 @@ async fn description_provided(step: &mut TrackerStep, mut status: FlowStatus, lo
 
 fn identification_provided(mut step: &TrackerStep, mut status: FlowStatus, log:&MessageLog, message_content: &str) -> Result<MessageRequest, String>{
 
+    info!("Sending VIN request to user");
     // No required params
     let mut message_request = status.value().successful_response.unwrap();
 
+    // Set phone number
     message_request.to.push(log.clone().phone_number);
+
+    // determine if vin or patent was matched
+    info!("validating vin: {}", message_content.to_string());
+    let is_valid = validate_vin(message_content.to_string());
+
+    if !is_valid {
+        error!("Provided VIN is not valid");
+
+        // Send error message
+        let error_message = MessageRequest{
+            system_id: 3,
+            to: vec![log.phone_number.clone()],
+            message_type: "text".to_string(),
+            content: MessageContent {
+                body: Some("VIN ingresado no es valido, verifique y reintente.".to_string()),
+                list: None,
+                buttons: None,
+            },
+        };
+
+        let error_res = send_message(message_request);
+
+        // If sending error message failed
+        if error_res.is_err(){
+            error!("Provided VIN is not valid, Error message wasn't sent: {}", error_res.as_ref().unwrap_err());
+            return Err(format!("Error message wasn't sent: {}", error_res.as_ref().unwrap_err()))
+        }
+
+        // If vin is invalid
+        return Err("Provided VIN is not valid".to_string())
+    }
 
     Ok(message_request)
 }
@@ -473,42 +506,12 @@ fn request_accepted(mut step: &TrackerStep, mut status: FlowStatus, log:&Message
 
 fn identification_request_sent(mut step: &TrackerStep, mut status: FlowStatus, log:&MessageLog, message_content: &str) -> Result<MessageRequest, String>{
 
+    info!("Sending VIN request to user");
     // No required params
     let mut message_request = status.value().successful_response.unwrap();
 
     // Set phone number
     message_request.to.push(log.clone().phone_number);
-
-    // determine if vin or patent was matched
-    info!("validating vin: {}", message_content.to_string());
-    let is_valid = validate_vin(message_content.to_string());
-
-    if !is_valid {
-        error!("Provided VIN is not valid");
-
-        // Send error message
-        let error_message = MessageRequest{
-            system_id: 3,
-            to: vec![log.phone_number.clone()],
-            message_type: "text".to_string(),
-            content: MessageContent {
-                body: Some("VIN ingresado no es valido, verifique y reintente.".to_string()),
-                list: None,
-                buttons: None,
-            },
-        };
-
-        let error_res = send_message(message_request);
-
-        // If sending error message failed
-        if error_res.is_err(){
-            error!("Provided VIN is not valid, Error message wasn't sent: {}", error_res.as_ref().unwrap_err());
-            return Err(format!("Error message wasn't sent: {}", error_res.as_ref().unwrap_err()))
-        }
-
-        // If vin is invalid
-        return Err("Provided VIN is not valid".to_string())
-    }
 
     Ok(message_request)
 }
