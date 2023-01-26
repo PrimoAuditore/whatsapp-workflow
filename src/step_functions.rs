@@ -291,8 +291,15 @@ fn brand_selected(mut step: &mut TrackerStep, mut status: FlowStatus, log:&Messa
 
     }
 
+    if message_content.contains("-id") {
+        // Replace message placeholder with selection
+        let selection = message_content.strip_suffix("-id").unwrap().to_string();
+        message_request.content.body = Some(message_request.content.body.as_ref().unwrap().replace("{}", &selection));
+    }
 
-    // Adding to
+
+
+    // Add to
     message_request.to.push(log.clone().phone_number);
 
     info!("Final status: {}", &step.status);
@@ -443,10 +450,6 @@ fn model_selected(mut step: &mut TrackerStep, mut status: FlowStatus, log:&Messa
             let to = (9 - final_list.len()) * page;
             let from = (9 - final_list.len()) * (page-1);
 
-            // list_size = 15; if page*10 < list_size; add next page button only
-            // If page == 1 > dont add previous page button; else add previous page button
-
-
             let list_res = get_list(data_origin, from, to);
 
             if list_res.is_err() {
@@ -462,10 +465,6 @@ fn model_selected(mut step: &mut TrackerStep, mut status: FlowStatus, log:&Messa
             }
         }
 
-        // check what is the next step expected response type
-        // let expected_response_id = step_definition.next_step.unwrap();
-        // let expected_response = FlowStatus::get_from_value(&(expected_response_id as u16).to_string());
-
         // Add choices to message in case of list of buttons messages
         debug!("Adding choices to message response");
         info!("{}", message_request.message_type);
@@ -475,6 +474,12 @@ fn model_selected(mut step: &mut TrackerStep, mut status: FlowStatus, log:&Messa
             message_request.content.list.as_mut().unwrap().choices = final_list;
         }
 
+    }
+
+    if message_content.contains("-id") {
+        // Replace message placeholder with selection
+        let selection = message_content.strip_suffix("-id").unwrap().to_string();
+        message_request.content.body = Some(message_request.content.body.as_ref().unwrap().replace("{}", &selection));
     }
 
 
