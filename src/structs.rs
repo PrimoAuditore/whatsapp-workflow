@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use fizzy_commons::shared_structs::MessageRequest;
+use redis::Value;
 use serde::{Deserialize, Serialize};
 use crate::constants::{FlowStatusId, MessageType, ResponseStatus};
 
@@ -205,7 +206,6 @@ pub struct TrackerStep{
     pub(crate) value: String,
     pub(crate) attached_files: String,
     pub(crate) message_reference: String,
-
 }
 
 // #[derive(Serialize, Deserialize, Clone)]
@@ -244,4 +244,74 @@ pub struct StepDefinition {
     pub(crate) next_step: Option<FlowStatusId>, // Next step depending on this step definition
     pub(crate) successful_response: Option<MessageRequest>, // Response to user in case the step can be created
     pub(crate) data_origin: Option<String>, // Origin of redis data for lists and button replies
+}
+
+
+#[derive(Deserialize)]
+pub struct TrackerParam{
+    pub tracker_id: String
+}
+
+impl TrackerStep {
+    pub fn parse_from_redis(&mut self, register: &Vec<Value>) -> TrackerStep {
+        let mut values: HashMap<String, String> = HashMap::new();
+
+
+        // Parse bulk into key-val hashmap
+        let mut param_name = "".to_string();
+        for (index, elem) in register.iter().enumerate(){
+
+
+            let string_val = match elem {
+                Value::Data(val) => {
+                    String::from_utf8(val.clone())
+                }
+                _ => {
+                    panic!("Unexpected value")
+                }
+            }.unwrap();
+
+            if index % 2 == 0 {
+                param_name = string_val;
+            }else{
+                values.insert(param_name.to_string(), string_val);
+            }
+        }
+
+        // Add parsed values to struct
+        self.value = String::from(values.get("value").expect("Expected parameter value wasn't found"));
+        values.remove("value");
+        self.status = String::from(values.get("status").expect("Expected parameter status wasn't found"));
+        values.remove("status");
+        self.tracker_id = String::from(values.get("tracker_id").expect("Expected parameter tracker_id wasn't found"));
+        values.remove("tracker_id");
+        self.timestamp = String::from(values.get("timestamp").expect("Expected parameter timestamp wasn't found"));
+        values.remove("timestamp");
+        self.attached_files = String::from(values.get("attached_files").expect("Expected parameter attached_files wasn't found"));
+        values.remove("attached_files");
+        self.message_reference = String::from(values.get("message_reference").expect("Expected parameter message_reference wasn't found"));
+        values.remove("message_reference");
+
+
+        // Fails it there are values in the hashmap that are not parsed into the tracker step struct
+        if values.iter().len() > 0 {
+            panic!("Found more values than expected");
+        }
+
+        self.clone()
+    }
+}
+
+impl Default for TrackerStep{
+    fn default() -> Self {
+        TrackerStep{
+            tracker_id: "".to_string(),
+            timestamp: "".to_string(),
+            id: "".to_string(),
+            status: "".to_string(),
+            value: "".to_string(),
+            attached_files: "".to_string(),
+            message_reference: "".to_string(),
+        }
+    }
 }

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::error::Error;
 use crate::structs::{Event, MessageLog, RequestTracker, TrackerStep};
-use redis::{Client, Commands, JsonCommands, RedisError, RedisResult};
+use redis::{Client, Commands, JsonCommands, RedisError, RedisResult, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
+use redis::Value::Bulk;
 
 pub fn get_user_mode(phone_number: &str) -> Result<u16, RedisError> {
     let client = create_client().unwrap();
@@ -340,6 +341,22 @@ pub fn get_step_by_status(tracker_id: &str, status: &str) -> Result<TrackerStep,
     println!("{:?}", trackerStep);
 
     Ok(trackerStep)
+}
+
+pub fn get_all_tracker_steps(tracker_id: &str) -> Result<Value, String>{
+    let client = create_client().unwrap();
+    let mut con = client.get_connection().unwrap();
+
+    let res:RedisResult<Value> = redis::cmd("FT.SEARCH")
+        .arg("trackerSteps")
+        .arg(format!("@tracker_id:{tracker_id}"))
+        .query(&mut con);
+
+    if res.is_err(){
+        return Err(res.unwrap_err().to_string())
+    }
+
+    Ok(res.unwrap())
 }
 
 

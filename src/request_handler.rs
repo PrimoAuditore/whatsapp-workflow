@@ -1,11 +1,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
+use actix_web::web::Query;
 use aws_config::SdkConfig;
 use fizzy_commons::shared_structs::MessageRequest;
 use log::Level::Info;
 use redis::RedisError;
+use redis::Value::Bulk;
 use regex::Regex;
 use serde::de::Unexpected::Str;
-use crate::redis::{create_new_step, create_new_tracker, get_last_tracker, get_last_tracker_step, get_user_message, publish_message};
+use crate::redis::{create_new_step, create_new_tracker, get_all_tracker_steps, get_last_tracker, get_last_tracker_step, get_user_message, publish_message};
 use crate::structs::{Event, MessageLog, ModifiedReference, StandardResponse, TrackerStep};
 use uuid::Uuid;
 use crate::constants::{FlowStatus, MessageType, ResponseStatus};
@@ -495,4 +497,35 @@ pub async fn incoming_message(log: MessageLog) -> Result<StandardResponse, Stand
     response.errors = None;
     response.references = references;
     Ok(response)
+}
+
+pub fn get_tracker_steps(tracker_id: &str) -> Result<Vec<TrackerStep>, StandardResponse> {
+
+    let mut response: StandardResponse = StandardResponse::new();
+    let mut errors: Vec<String> = vec![];
+
+    // Obtain redis bulk for tracker steps corresponding to tracker id
+    info!("Obtaining tracker {tracker_id} steps");
+    let value = get_all_tracker_steps(tracker_id);
+
+    if value.is_err() {
+        error!("Error retrieving tracker steps {}", value.as_ref().unwrap_err());
+        errors.push(value.unwrap_err());
+        response.errors = Some(errors);
+        return Err(response)
+    }
+
+    let mut values:Vec<TrackerStep> = vec![];
+
+    info!("Parsing found bulks into struct");
+    // Parse redis bulk to tracker step struct
+    for x in value.unwrap().as_sequence().unwrap(){
+        if let Bulk(register) = x {
+            let tracker_step = TrackerStep::default()
+                .parse_from_redis(register);
+            values.push(tracker_step);
+        }
+    }
+
+    Ok(values)
 }

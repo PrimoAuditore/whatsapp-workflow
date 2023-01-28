@@ -1,5 +1,7 @@
-use crate::structs::MessageLog;
+use std::collections::HashMap;
+use crate::structs::{MessageLog, TrackerParam};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::web::Query;
 use aws_config::meta::region::RegionProviderChain;
 use aws_config::SdkConfig;
 use crate::constants::FlowStatus;
@@ -27,6 +29,7 @@ async fn main() -> std::io::Result<()> {
             .service(health)
             .service(incoming)
             .service(outgoing)
+            .service(get_tracker_steps)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
@@ -53,6 +56,18 @@ async fn incoming(message_log: web::Json<MessageLog>) -> impl Responder {
 #[post("/outgoing")]
 async fn outgoing(message_log: web::Json<MessageLog>) -> impl Responder {
     let response = request_handler::outgoing_message(message_log.0).await;
+
+    match response {
+        Ok(response) => HttpResponse::Ok().body(serde_json::to_string(&response).unwrap()),
+        Err(response) => {
+            HttpResponse::InternalServerError().body(serde_json::to_string(&response).unwrap())
+        }
+    }
+}
+
+#[get("/tracker-steps")]
+async fn get_tracker_steps(tracker_id: Query<TrackerParam>) -> impl Responder {
+    let response = request_handler::get_tracker_steps(&tracker_id.tracker_id);
 
     match response {
         Ok(response) => HttpResponse::Ok().body(serde_json::to_string(&response).unwrap()),
