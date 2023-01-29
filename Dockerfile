@@ -17,5 +17,7 @@ RUN --mount=type=ssh cargo build --release
 
 FROM debian:11-slim
 WORKDIR /app
+RUN apt-get update && \
+    apt-get install -y ca-certificates
 COPY --from=build /app/target/release/vin-webhook ./vin-webhook
 CMD ["./vin-webhook"]
