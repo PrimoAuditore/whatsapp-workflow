@@ -20,4 +20,5 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y ca-certificates
 COPY --from=build /app/target/release/vin-webhook ./vin-webhook
+COPY --from=build /app/download-image.sh ./download-image.sh
 CMD ["./vin-webhook"]
